@@ -41,13 +41,15 @@ Axioms \[Expand\]
 
 Nichols one and done paper - placing study into broader context - surely DAGs help with that?
 
-DAGs and AIC - do not equate
+DAGs and AIC - do not equate. AIC is a dangerous tool to use without any corresponding DAG. The same model with different underlying
 
 How to make AIC useful for DAGs
 
 ### Scenario 1 - H-P approach works
 
 ```{r}
+#| label: HP Scenario 1
+#| echo: false
 #| message: false
 #| warning: false
 #| paged-print: true
@@ -56,8 +58,6 @@ library(dplyr)
 library(purrr)
 library(tidyr)
 library(broom)
-library(knitr)
-library(kableExtra)
 
 n <- 100
 n_sim <- 100
@@ -115,28 +115,24 @@ x_effect_summary <- ranked_results |>
   group_by(formula) |>
   summarise(
     `Median x effect` = median(x_effect),
-    `True x effect` = 0,
+    `True x effect` = 2,
     `Median AIC rank` = median(AIC_rank),
     .groups = "drop"
   )
 
-highlight_row <- which(top_models$formula == "y ~ x + z")
-
 top_models |>
-  arrange(desc(`Number of times ranked best (lowest AIC)`)) |>
-  kbl(caption = "Top model rankings across simulations") |>
-  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+  arrange(desc(`Number of times ranked best (lowest AIC)`))
 
 x_effect_summary |>
-  arrange(desc(`Median AIC rank`)) |>
-  kbl(caption = "Estimated effect of x") |>
-  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+  arrange(desc(`Median AIC rank`))
 
 ```
 
 ### Scenario 2 - H-P approach fails
 
 ```{r}
+#| label: HP Scenario 2
+#| echo: false
 #| message: false
 #| warning: false
 #| paged-print: true
@@ -191,16 +187,11 @@ x_effect_summary <- ranked_results |>
     .groups = "drop"
   )
 
-highlight_row <- which(top_models$formula == "y ~ z")
-
 top_models |>
-  arrange(desc(`Number of times ranked best (lowest AIC)`)) |>
-  kbl(caption = "Top model rankings across simulations") |>
-  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+  arrange(desc(`Number of times ranked best (lowest AIC)`))
 
 x_effect_summary |>
-  arrange(desc(`Median AIC rank`)) |>
-  kbl(caption = "Estimated effect of x")
+  arrange(desc(`Median AIC rank`))
 ```
 
 Though the complication is that $z$ should not be interpreted but will very often be interpreted (Greenland Table 2 fallacy paper).
