@@ -25,7 +25,7 @@ Converse to the above, mostly *ad hoc,* approach for identifying and dealing wit
 
 Both Nichols and Hones argue that predictive models are useful for understanding causality (e.g. Hones says validated predictions are excellent evidence of causation) and we agree but with the important caveat that the model does not reach "strong" predictions through confounding. Indeed, for many people when first introduced to DAGs, this can be a source of confusion. Historically, students are taught that "correlation does not equal causation" but more subtly are taught that confounding largely means "spurious correlations" - e.g. where two randomly chosen variables happen to be correlated with each other. In reality, few researchers would ever choose to include entirely random variables in their analysis.
 
-This ability to think and convey confounding is lacking. For example, in an excellent paper of spatial confounding (spatial+ paper but unfair to throw them under the bus like this - alternative way to give evidence of this?) the authors could not suitably describe *how* space may confound a relationship between $x$ and $y$, and instead opt to use generic descriptions that are difficult to challenge.
+HOW PAPERS LOOSELY DEFINE PAPER - LEADING TO RABBIT HOLE
 
 ## Transparency
 
@@ -40,6 +40,170 @@ The core problem in the H-D approach, without the inclusion of DAGs, is that it 
 Axioms \[Expand\]
 
 Nichols one and done paper - placing study into broader context - surely DAGs help with that?
+
+DAGs and AIC - do not equate
+
+How to make AIC useful for DAGs
+
+### Scenario 1 - H-P approach works
+
+```{r}
+#| message: false
+#| warning: false
+#| paged-print: true
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(broom)
+library(knitr)
+library(kableExtra)
+
+n <- 100
+n_sim <- 100
+
+predictors <- c("x", "z", "v")
+model_formulas <- unlist(
+  lapply(1:length(predictors), function(i) {
+    combn(predictors, i, simplify = FALSE)
+  }), recursive = FALSE
+)
+model_formulas <- lapply(model_formulas, function(vars) as.formula(paste("y ~", paste(vars, collapse = " + "))))
+
+results <- vector("list", n_sim)
+
+for (i in 1:n_sim) {
+  z <- runif(n, 0, 10)
+  x <- rnorm(n, mean = 1 + 2.5 * z, sd = 1)
+  y <- rnorm(n, mean = -2 + -3 * z + 2 * x, sd = 1)
+  v <- rpois(n, lambda = 4)
+  df <- data.frame(x, y, z, v)
+
+  sim_results <- map_dfr(model_formulas, function(formula) {
+    fit <- lm(formula, data = df)
+    coefs <- coef(summary(fit))
+    has_x <- "x" %in% rownames(coefs)
+    tibble(
+      formula = deparse(formula),
+      AIC = AIC(fit),
+      x_effect = if (has_x) coefs["x", "Estimate"] else NA_real_
+    )
+  }) |> mutate(sim = i)
+
+  results[[i]] <- sim_results
+}
+
+all_results <- bind_rows(results)
+
+ranked_results <- all_results |>
+  group_by(sim) |>
+  mutate(AIC_rank = rank(AIC, ties.method = "first")) |>
+  ungroup()
+
+all_formulas <- unique(all_results$formula)
+
+top_models <- ranked_results |>
+  filter(AIC_rank == 1) |>
+  count(formula, sort = TRUE) |>
+  right_join(tibble(formula = all_formulas), by = "formula") |>
+  mutate(`Number of times ranked best (lowest AIC)` = replace_na(n, 0)) |>
+  select(-n) |>
+  arrange(desc(`Number of times ranked best (lowest AIC)`))
+
+x_effect_summary <- ranked_results |>
+  filter(!is.na(x_effect)) |>
+  group_by(formula) |>
+  summarise(
+    `Median x effect` = median(x_effect),
+    `True x effect` = 0,
+    `Median AIC rank` = median(AIC_rank),
+    .groups = "drop"
+  )
+
+highlight_row <- which(top_models$formula == "y ~ x + z")
+
+top_models |>
+  arrange(desc(`Number of times ranked best (lowest AIC)`)) |>
+  kbl(caption = "Top model rankings across simulations") |>
+  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+
+x_effect_summary |>
+  arrange(desc(`Median AIC rank`)) |>
+  kbl(caption = "Estimated effect of x") |>
+  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+
+```
+
+### Scenario 2 - H-P approach fails
+
+```{r}
+#| message: false
+#| warning: false
+#| paged-print: true
+
+results <- vector("list", n_sim)
+
+for (i in 1:n_sim) {
+  x <- rnorm(n, mean = 0, sd = 1)
+  v <- rpois(n, lambda = 4)
+  y <- rnorm(n, 0, sd = 1)
+  z <- runif(n, 1 + -2 * x + 1 * y, 1)
+  df <- data.frame(x, y, z, v)
+
+  sim_results <- map_dfr(model_formulas, function(formula) {
+    fit <- lm(formula, data = df)
+    coefs <- coef(summary(fit))
+    has_x <- "x" %in% rownames(coefs)
+    tibble(
+      formula = deparse(formula),
+      AIC = AIC(fit),
+      x_effect = if (has_x) coefs["x", "Estimate"] else NA_real_
+    )
+  }) |> mutate(sim = i)
+
+  results[[i]] <- sim_results
+}
+
+all_results <- bind_rows(results)
+
+ranked_results <- all_results |>
+  group_by(sim) |>
+  mutate(AIC_rank = rank(AIC, ties.method = "first")) |>
+  ungroup()
+
+all_formulas <- unique(all_results$formula)
+
+top_models <- ranked_results |>
+  filter(AIC_rank == 1) |>
+  count(formula, sort = TRUE) |>
+  right_join(tibble(formula = all_formulas), by = "formula") |>
+  mutate(`Number of times ranked best (lowest AIC)` = replace_na(n, 0)) |>
+  select(-n) |>
+  arrange(desc(`Number of times ranked best (lowest AIC)`))
+
+x_effect_summary <- ranked_results |>
+  filter(!is.na(x_effect)) |>
+  group_by(formula) |>
+  summarise(
+    `Median x effect` = median(x_effect),
+    `True x effect` = 0,
+    `Median AIC rank` = median(AIC_rank),
+    .groups = "drop"
+  )
+
+highlight_row <- which(top_models$formula == "y ~ z")
+
+top_models |>
+  arrange(desc(`Number of times ranked best (lowest AIC)`)) |>
+  kbl(caption = "Top model rankings across simulations") |>
+  row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+
+x_effect_summary |>
+  arrange(desc(`Median AIC rank`)) |>
+  kbl(caption = "Estimated effect of x")
+```
+
+Though the complication is that $z$ should not be interpreted but will very often be interpreted (Greenland Table 2 fallacy paper).
 
 ## The band wagon
 
